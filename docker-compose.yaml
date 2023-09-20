@@ -1,0 +1,70 @@
+version: '3.9'
+services:
+  #test database for local development
+  mysqldb:
+    image: mysql:8.0
+    container_name: tk_db
+    command:
+      [
+        'mysqld',
+        '--character-set-server=utf8mb4',
+        '--collation-server=utf8mb4_unicode_ci'
+      ]
+    ports:
+      - 3365:3365
+    volumes:
+      - ./backend/database/tk_db:/var/lib/mysql
+      - ./backend/database/init_db.sql:/docker-entrypoint-initdb.d/init_db.sql
+
+    environment:
+      - MYSQL_DATABASE=${DB_DATABASE}
+      - MYSQL_USER=${DB_USERNAME}
+      - MYSQL_PASSWORD=${DB_PASSWORD}
+      - MYSQL_ROOT_PASSWORD=${DB_ROOT_PASSWORD}
+      - MYSQL_TCP_PORT=3365
+      - LANG=C.UTF-8
+    healthcheck:
+      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost" ]
+      timeout: 5s
+      retries: 10
+    restart: always
+
+  tk_server:
+    build: ./backend
+    ports:
+      - "7152:7152"
+    volumes:
+      - ./backend/web:/app/web
+    entrypoint:
+      [
+        "sanic",
+        "server.app",
+        "--dev",
+        "--port=7152",
+        "--host=0.0.0.0"
+      ]
+    env_file:
+      - ./.env
+    restart: always
+    #inititate the database for development purpose
+    depends_on:
+      mysqldb:
+        condition: service_healthy
+    container_name: tk_server
+
+  tk_ui:
+    build: ./frontend
+    ports:
+      - "8080:8080"
+    container_name: vue-ui
+    volumes:
+       - ./frontend/src:/app/frontend/src
+       - /app/frontend/node_modules
+    stdin_open: true
+    tty: true
+    environment:
+       - CHOKIDAR_USEPOLLING=true
+    command: npm run serve -- --public 0.0.0.0:8080
+networks:
+  default:
+    driver: bridge
