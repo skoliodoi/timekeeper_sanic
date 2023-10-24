@@ -8,10 +8,14 @@ export default {
     context.commit("getDataFromStorage");
     return axios
       .post(`${config.apiBaseUrl}/download_schedule`, {
-        // date: "2023-04-03",
-        // project: "0298/001/RZE",
         date: payload,
         project: context.state.schedules.selectedProjectCode,
+      }, {
+        headers: {
+          Accept: "application/json",
+          ContentType: "multipart/form-data",
+          Authorization: `Bearer ${context.state.loggedUserData.token}`,     
+        }
       })
       .then((res) => {
         const parsedData = JSON.parse(res.data);
@@ -44,6 +48,7 @@ export default {
         }
       })
       .catch((err) => {
+        console.log(err.response)
         if (err.response.status == 409) {
           return {
             message: 'Hurr durr',

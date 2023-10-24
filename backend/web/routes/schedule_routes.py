@@ -69,8 +69,8 @@ def get_user_login(mocarz_id):
 
 
 @schedules.post('/api/download_schedule')
-# @protected
-def download_schedule(request):
+@protected
+async def download_schedule(request):
     query = select(
         tk_schedules_table.c.workday,
         tk_schedules_table.c.user,
@@ -90,6 +90,7 @@ def download_schedule(request):
         result = conn.execute(query).fetchall()
 
     data = [user._mapping for user in result]
+    
     transformed_data = []
     for item in data:
         user_name = item['user']
@@ -121,43 +122,6 @@ def download_schedule(request):
                 'zmiany': [zmiana_dict]
             }
             transformed_data.append(user_dict)
-    # for item in data:
-    #     user = item['user']
-    #     zmiana = item['zmiana']
-    #     zmiana_details = {
-    #         'scheduled_start': item['scheduled_start'],
-    #         'scheduled_end': item['scheduled_end'],
-    #         'scheduled_duration': item['scheduled_duration'],
-    #         'scheduled_duration_milliseconds': item['scheduled_duration_milliseconds']
-    #     }
-
-    #     zmiana_dict = {
-    #         'zmiana_nr': zmiana,
-    #         'zmiana_details': zmiana_details
-    #     }
-
-    #     user_dict = {
-    #         'user': user,
-
-    #         user: {
-    #             'mocarz_id': item['mocarz_id'],
-    #             'zmiany': []
-    #         }
-    #     }
-
-    #     # Check if the user already exists in transformed_data
-    #     user_exists = False
-    #     for transformed_item in transformed_data:
-    #         if user in transformed_item:
-    #             transformed_item[user]['zmiany'].append(zmiana_dict)
-    #             user_exists = True
-    #             break
-
-    #     if not user_exists:
-    #         user_dict[user]['zmiany'].append(zmiana_dict)
-    #         transformed_data.append(user_dict)
-
-    # Printing the transformed data
     with engine.begin() as conn:
         for person in transformed_data:
             login = get_user_login(str(person['mocarz_id']))
@@ -165,7 +129,6 @@ def download_schedule(request):
                 request.json['date'], request.json['date'], login))
             person['work_history'] = [
                 dict(work_stage._mapping) for work_stage in work_history]
-    # print(transformed_data)
     transformed_data_json = json.dumps(
         transformed_data, default=str, ensure_ascii=False)
     return sanic_json(transformed_data_json)
@@ -175,10 +138,10 @@ def download_schedule(request):
 @schedules.post('/api/upload_schedule')
 @protected
 async def upload_schedule(request):
+  try:
     project = request.form.get('project')
     edited_by = request.form.get('edited_by')
     correction = False if request.form.get('correction') == 'false' else True
-    print('Correction: ', correction)
     file = request.files.get('file')
     file_parameters = {
         'body': file.body,
@@ -188,7 +151,6 @@ async def upload_schedule(request):
     body_df = pd.read_csv(BytesIO(file_parameters['body']))
     body_df2 = body_df[(body_df['Grafik suma'] != '0,00') & (body_df['Grafik suma'].notna()) & (
         body_df['Grafik suma'] != 'błąd - brak kompletu danych')].replace({np.nan: None})
-    print(body_df2)
     result_dict = body_df2.to_dict('records')
     grouped_data = {}
     for item in result_dict:
@@ -261,7 +223,6 @@ async def upload_schedule(request):
     with engine.begin() as conn:
         find_schedules = conn.execute(
             check_existing_schedules(fragmented_date, project)).first()
-        print(find_schedules)
         if not find_schedules or correction:
             if correction:
                 clear_existing_schedules(fragmented_date, project)
@@ -271,3 +232,5 @@ async def upload_schedule(request):
             return text('File uploaded')
         else:
             raise ExistingSchedule
+  except Exception as e:
+      raise SanicException(f"Problem z plikiem - {e}", 422)

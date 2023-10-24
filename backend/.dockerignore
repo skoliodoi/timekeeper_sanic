@@ -1,1 +1,10 @@
 ./web/backups
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+*.db
+*.sqlite
+*.log
+./database
+./env

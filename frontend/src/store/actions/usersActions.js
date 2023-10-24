@@ -230,7 +230,6 @@ export default {
             workStageFilters.push(status.work_stage)
           }
         }
-        console.log(workStageFilters)
         if (workStageFilters.includes("Work", 1) ) {
           const workIndex = workStageFilters.indexOf("Work")
           const element = workStageFilters.splice(workIndex, 1)[0];

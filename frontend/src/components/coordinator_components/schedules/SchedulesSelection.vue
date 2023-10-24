@@ -37,7 +37,7 @@
           </div>
         </div>
         <div class="content" v-if="searchFilter == 'add-schedule'">
-          <SelectProjectModal id="schedule-project" />
+          <ScheduleSelectProjectModal id="schedule-project" />
           <div class="field">
             <div class="ui file action input" style="width: 100%">
               <input id="fileInput" type="file" @change="handleFile($event)" />
@@ -58,7 +58,7 @@
           </div>
         </div>
         <div class="content" v-else>
-          <SelectProjectModal id="schedule-project" />
+          <ScheduleSelectProjectModal id="schedule-project" />
           <SchedulesCalendar :calendarType="calendarType" />
 
           <!-- <div
@@ -101,12 +101,12 @@ import AddScheduleModal from "../../../models/modals/AddScheduleModal.vue";
 import SuccessModal from "../../../models/modals/SuccessModal.vue";
 import SchedulesCalendar from "./SchedulesCalendar.vue";
 import BackButton from "../../../models/BackButton.vue";
-import SelectProjectModal from "../../../models/modals/FormModals/SelectProjectModal.vue";
+import ScheduleSelectProjectModal from "../../../models/modals/FormModals/ScheduleSelectProjectModal.vue";
 import { mapGetters } from "vuex";
 export default {
   components: {
     BackButton,
-    SelectProjectModal,
+    ScheduleSelectProjectModal,
     SchedulesCalendar,
     AddScheduleModal,
     SuccessModal,
