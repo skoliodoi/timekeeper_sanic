@@ -464,8 +464,6 @@ export default {
         let endDateFormatted = DateTime.fromISO(
           new Date(data.endDateData).toISOString()
         );
-        console.log('Boof')
-        console.log(data.projectData)
         let startTimeToModify = startDateFormatted.toFormat("yyyy-MM-dd T:ss");
         let endTimeToModify = endDateFormatted.toFormat("yyyy-MM-dd T:ss");
         await this.$store.dispatch("initTimeUpdate", {

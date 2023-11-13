@@ -2,8 +2,8 @@ from sanic import Blueprint
 import json
 from sanic.response import json as sanic_json, text
 from sanic.exceptions import SanicException
-from sqlalchemy import select, union_all, insert, update, delete, cast, Time
-from web.routes.work_history_routes import work_history_query
+from sqlalchemy import select, insert, delete, asc, and_, func
+# from web.routes.work_history_routes import work_history_query
 from web.auth import protected
 from io import BytesIO
 import pandas as pd
@@ -11,7 +11,10 @@ import numpy as np
 from web.db_connection import (
     engine,
     tk_users_table,
-    tk_schedules_table
+    tk_schedules_table,
+    tk_finished_work_table,
+    tk_projects_table,
+    tk_campaigns_table
 )
 
 
@@ -86,6 +89,37 @@ async def download_schedule(request):
         tk_schedules_table.c.project_code == request.json['project']
     )
 
+    def compare_to_history(start_date, end_date, users):
+      query = select(
+          tk_finished_work_table.c.work_stage_started,
+          tk_finished_work_table.c.work_stage_ended,
+          tk_finished_work_table.c.work_stage_duration,
+          tk_finished_work_table.c.work_stage,
+          tk_finished_work_table.c.work_stage_additional_info,
+          tk_finished_work_table.c.work_time_ended,
+          tk_finished_work_table.c.work_time_started,
+          tk_finished_work_table.c.campaign_name,
+          tk_finished_work_table.c.campaign_id,
+          tk_projects_table.c.project_code,
+          tk_projects_table.c.project_name,
+          tk_users_table.c.moccarz_id
+      ).select_from(
+          tk_finished_work_table
+      ).join(
+          tk_campaigns_table, tk_campaigns_table.c.campaign_id == tk_finished_work_table.c.campaign_id
+      ).join(
+          tk_projects_table, tk_projects_table.c.id == tk_campaigns_table.c.project_id
+      ).join(
+          tk_users_table, tk_finished_work_table.c.user_id == tk_users_table.c.login
+      ).where(
+          and_(func.date(tk_finished_work_table.c.work_stage_ended) >= start_date,
+              func.date(tk_finished_work_table.c.work_stage_ended) <= end_date,
+              tk_finished_work_table.c.is_ghost == False,
+              tk_finished_work_table.c.user_id.in_(users),
+              )
+      ).order_by(asc(tk_finished_work_table.c.work_stage_ended))
+      return query
+
     with engine.begin() as conn:
         result = conn.execute(query).fetchall()
 
@@ -122,13 +156,34 @@ async def download_schedule(request):
                 'zmiany': [zmiana_dict]
             }
             transformed_data.append(user_dict)
+    
+
+    def get_logins(ids):
+      query = select(tk_users_table.c.login, tk_users_table.c.moccarz_id).where(
+          tk_users_table.c.moccarz_id.in_(ids)
+      )
+      return query
+
+    ids = list(dict.fromkeys([t['mocarz_id'] for t in transformed_data]))
     with engine.begin() as conn:
-        for person in transformed_data:
-            login = get_user_login(str(person['mocarz_id']))
-            work_history = conn.execute(work_history_query(
-                request.json['date'], request.json['date'], login))
-            person['work_history'] = [
-                dict(work_stage._mapping) for work_stage in work_history]
+        result = conn.execute(get_logins(ids)).fetchall()
+    full_users = [{'mocarz_id': r.moccarz_id, 'login': r.login} for r in result]
+    logins = list(dict.fromkeys([r.login for r in result]))
+    # print(logins)
+    # conn.execute(compare_to_history(request.json['date'], request.json['date'], login))
+    with engine.begin() as conn:
+        work_history = conn.execute(compare_to_history(
+            request.json['date'], request.json['date'], logins)).fetchall()
+        # print(work_history)
+        # for person in transformed_data:
+        #     # login = get_user_login(str(person['mocarz_id']))
+        #     person['work_history'] = [
+        #         dict(work_stage._mapping) for work_stage in work_history]
+    for person in transformed_data:
+      person['work_history'] = []
+      for w in work_history:
+          if w.moccarz_id == person['mocarz_id']:
+            person['work_history'].append(dict(w._mapping))
     transformed_data_json = json.dumps(
         transformed_data, default=str, ensure_ascii=False)
     return sanic_json(transformed_data_json)

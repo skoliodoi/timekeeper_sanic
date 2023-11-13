@@ -192,7 +192,6 @@ def manage_scheduled_time(date_arg, time_arg, buffer=0):
                   seconds=time.second) + timedelta(minutes=buffer)
     return added_hours
 
-
 def create_history_records(selected_date, record, editor):
     with engine.begin() as conn:
         project_details = conn.execute(
@@ -222,6 +221,7 @@ def create_history_records(selected_date, record, editor):
                 work_stage_additional_info=record['additionalInfo'],
                 comments=record['comments'],
                 work_stage_started=record['workStageStarted'],
+                work_time_started=record['workStageStarted'],
                 work_stage_ended=record['workStageEnded'],
                 work_stage_duration=record['duration'],
                 scheduled_start_time=scheduled_start_time,
@@ -281,7 +281,8 @@ def declare_work_stage_times(user_id, date, start=True):
         )).where(
             and_(
                 tk_finished_work_table.c.user_id == user_id,
-                tk_finished_work_table.c.work_stage_started.like(f"%{date}%")
+                tk_finished_work_table.c.work_stage_started.like(f"%{date}%"),
+                tk_finished_work_table.c.work_time_ended == None
             )
         )
     else:
@@ -290,12 +291,14 @@ def declare_work_stage_times(user_id, date, start=True):
         )).where(
             and_(
                 tk_finished_work_table.c.user_id == user_id,
-                tk_finished_work_table.c.work_stage_ended.like(f"%{date}%")
+                tk_finished_work_table.c.work_stage_ended.like(f"%{date}%"),
+                tk_finished_work_table.c.work_time_ended == None
             )
         )
     with engine.begin() as conn:
         query_result = conn.execute(select_query).first()
     return query_result[0]
+
 
 
 @ history.post('/api/delete_time')
@@ -322,21 +325,22 @@ async def update_work_history(request):
         return_text = "No records to delete"
     if records_to_create:
         for record in records_to_create:
-            print(record)
             create_history_records(selected_date, record, edited_by)
     else:
         print("No records to create")
 
     first_work_stage = declare_work_stage_times(user_id, selected_date)
-
     latest_work_stage = declare_work_stage_times(user_id, selected_date, False)
+
+
     with engine.begin() as conn:
         conn.execute(
             update(tk_finished_work_table).where(
                 and_(
                     tk_finished_work_table.c.user_id == user_id,
                     tk_finished_work_table.c.work_stage_ended.like(
-                        f"%{selected_date}%")
+                        f"%{selected_date}%"),
+                    tk_finished_work_table.c.work_time_ended == None,
                 )
             ).values(
                 work_time_started=first_work_stage,
