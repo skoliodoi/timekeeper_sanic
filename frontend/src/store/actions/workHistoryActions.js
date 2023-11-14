@@ -218,12 +218,15 @@ export default {
   async deleteWorkHistory(context, payload) {
     const projectView = payload.projectView;
     context.state.loaders.workHistoryLoader = true;
+    console.log(payload)
     context.commit("getDataFromStorage");
     return axios
       .post(
         `${config.apiBaseUrl}/delete_time`,
         {
           work_stage_id: payload.id,
+          login: payload.login,
+          selectedDate: payload.selectedDate,
           editedBy: context.state.loggedUserData.login,
         },
         {

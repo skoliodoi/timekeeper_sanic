@@ -127,7 +127,7 @@ export default {
 
     // let projectData = homeState.projects;
     const campaignData = homeState.projects.selectedCampaign;
-    context.dispatch('checkCampaigns', homeState.projects.selectedProjectCode)
+    context.dispatch("checkCampaigns", homeState.projects.selectedProjectCode);
     // console.log(campaignData)
     let startingHours = campaignData.starting_hours;
     let endingHours = campaignData.ending_hours;
@@ -235,7 +235,7 @@ export default {
     homeState.workStage.currentlySelected = payload.workStage;
     homeState.counterElements.changeProjectByButton = false;
     homeState.counterElements.changeCampaignByButton = false;
-    context.dispatch('checkCampaigns', homeState.projects.selectedProjectCode)
+    context.dispatch("checkCampaigns", homeState.projects.selectedProjectCode);
     // for (const stage in workStageOptions) {
     //   context.dispatch('calculateTotalSegmentTime', { workStage: workStageOptions[stage] });
     // }
@@ -263,9 +263,12 @@ export default {
     });
 
     const workId = await context.dispatch("getCurrentId");
-    const prevCampaignId = homeState.campaignChange ? homeState.projects.selectedCampaignId : null;
-    const prevCampaignName = homeState.campaignChange ? homeState.projects.selectedCampaignName : null;
-
+    const prevCampaignId = homeState.campaignChange
+      ? homeState.projects.selectedCampaignId
+      : null;
+    const prevCampaignName = homeState.campaignChange
+      ? homeState.projects.selectedCampaignName
+      : null;
 
     await context.dispatch("sendDataToServer", {
       workStageStart: homeState.timeStart,
@@ -277,13 +280,15 @@ export default {
       workStageId: workId,
       updateTable: true,
       campaignId: prevCampaignId,
-      campaignName: prevCampaignName
+      campaignName: prevCampaignName,
     });
 
     homeState.extraBreak.additionalInfo = payload.additionalInfo;
     homeState.timeStart = timeReset;
-    homeState.projects.selectedCampaignId = homeState.projects.selectedCampaign.campaign_id;
-    homeState.projects.selectedCampaignName = homeState.projects.selectedCampaign.campaign_name;
+    homeState.projects.selectedCampaignId =
+      homeState.projects.selectedCampaign.campaign_id;
+    homeState.projects.selectedCampaignName =
+      homeState.projects.selectedCampaign.campaign_name;
 
     if (!homeState.dataUpload.successful) {
       return;
@@ -371,6 +376,9 @@ export default {
         {
           date_id: payload.dateId,
           user_id: context.state.loggedUserData.login,
+          work_time_started: DateTime.fromISO(context.state.workStart).toFormat(
+            "yyyy-MM-dd T:ss"
+          ),
           work_time_ended: fixDate(payload.workTimeEnded),
         },
         {
@@ -425,9 +433,11 @@ export default {
             homeState.projects.selected = latestRecord.project_name;
             homeState.projects.selectedProjectCode = latestRecord.project_code;
             homeState.projects.selectedCampaignId = latestRecord.campaign_id;
-            homeState.projects.selectedCampaignName = latestRecord.campaign_name;
-            homeState.counterElements.currentProjectCode = latestRecord.project_code;
-            context.dispatch('checkCampaigns', latestRecord.project_code)
+            homeState.projects.selectedCampaignName =
+              latestRecord.campaign_name;
+            homeState.counterElements.currentProjectCode =
+              latestRecord.project_code;
+            context.dispatch("checkCampaigns", latestRecord.project_code);
             homeState.dataUpload.successful = true;
             homeState.workId = latestRecord.work_stage_id;
             homeState.workStart = DateTime.fromSQL(
@@ -472,7 +482,8 @@ export default {
         }
       }
     }
-    context.state.counterElements.oneCampaign = selectableCampaigns.length == 1 ? true : false;
+    context.state.counterElements.oneCampaign =
+      selectableCampaigns.length == 1 ? true : false;
   },
 
   saveToTimeTable(context, payload) {

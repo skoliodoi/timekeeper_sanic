@@ -7,7 +7,7 @@ from datetime import date, datetime, timedelta
 from sanic import Blueprint
 from sanic.response import json as sanic_json, text
 from sqlalchemy import select, asc, and_, func, insert, delete, update, cast, Date
-from web.routes.counter_routes import find_client
+from web.routes.counter_routes import find_client, update_work_end_time
 from web.db_connection import (
     engine,
     tk_finished_work_table,
@@ -81,7 +81,6 @@ async def get_project_history(request):
         )
         return query
 
-
     def coordinator_history_query():
         query = basic_history_query().join(
             tk_user_campaign_table, tk_user_campaign_table.c.campaign_id == tk_campaigns_table.c.campaign_id
@@ -116,6 +115,7 @@ async def get_project_history(request):
             return sanic_json(response)
 
 # Ścieżka do sprawdzania historii użytkownika na podstawie loginu i dat przekazanych w requeście
+
 
 def work_history_query(start_date, end_date, user):
     query = select(
@@ -153,6 +153,7 @@ def work_history_query(start_date, end_date, user):
     ).order_by(asc(tk_finished_work_table.c.work_stage_ended))
     return query
 
+
 @ history.post('/api/get_work_history')
 @protected
 async def get_work_history(request):
@@ -162,7 +163,6 @@ async def get_work_history(request):
     start_date = request.json.get('start_date')
     end_date = request.json.get('end_date')
 
-
     today_query = select(tk_finished_work_table).where(
         and_(
             tk_finished_work_table.c.work_time_ended.is_not(None),
@@ -171,7 +171,8 @@ async def get_work_history(request):
         )
     )
     with engine.begin() as conn:
-        work_history = conn.execute(work_history_query(start_date, end_date, user))
+        work_history = conn.execute(
+            work_history_query(start_date, end_date, user))
         present_work = conn.execute(today_query)
 
     response['work_history'] = json.dumps(
@@ -191,6 +192,7 @@ def manage_scheduled_time(date_arg, time_arg, buffer=0):
         timedelta(hours=time.hour, minutes=time.minute,
                   seconds=time.second) + timedelta(minutes=buffer)
     return added_hours
+
 
 def create_history_records(selected_date, record, editor):
     with engine.begin() as conn:
@@ -301,12 +303,15 @@ def declare_work_stage_times(user_id, date, start=True):
 
 
 
-@ history.post('/api/delete_time')
+
+
+@history.post('/api/delete_time')
 @protected
 async def delete_time(request):
     record_id = request.json.get('work_stage_id')
     editor = request.json.get('editedBy')
     copy_and_delete_records(record_id, editor, 'Delete request')
+    update_work_end_time(request.json['login'], request.json['selectedDate'])
     return text('Record was deleted')
 
 
@@ -324,6 +329,7 @@ async def update_work_history(request):
     else:
         return_text = "No records to delete"
     if records_to_create:
+        # pass
         for record in records_to_create:
             create_history_records(selected_date, record, edited_by)
     else:
@@ -332,64 +338,34 @@ async def update_work_history(request):
     first_work_stage = declare_work_stage_times(user_id, selected_date)
     latest_work_stage = declare_work_stage_times(user_id, selected_date, False)
 
-
-    with engine.begin() as conn:
-        conn.execute(
-            update(tk_finished_work_table).where(
-                and_(
-                    tk_finished_work_table.c.user_id == user_id,
-                    tk_finished_work_table.c.work_stage_ended.like(
-                        f"%{selected_date}%"),
-                    tk_finished_work_table.c.work_time_ended == None,
-                )
-            ).values(
-                work_time_started=first_work_stage,
-                work_time_ended=latest_work_stage
-            )
-        )
-
+    update_work_end_time(user_id, selected_date)
+    # with engine.begin() as conn:
+    # result = conn.execute(
+    #     select(tk_finished_work_table.c.work_stage_id,
+    #            tk_finished_work_table.c.work_stage_started,
+    #            tk_finished_work_table.c.work_stage_ended,
+    #            tk_finished_work_table.c.work_time_started,
+    #            tk_finished_work_table.c.work_time_ended
+    #            ).where(
+    #         tk_finished_work_table.c.user_id == user_id,
+    #         tk_finished_work_table.c.work_stage_ended.like(
+    #             f"%{selected_date}%"),
+    #     )
+    # ).fetchall()
+    # conn.execute(
+    #     update(tk_finished_work_table).where(
+    #         and_(
+    #             tk_finished_work_table.c.user_id == user_id,
+    #             tk_finished_work_table.c.work_stage_ended.like(
+    #                 f"%{selected_date}%"),
+    #             tk_finished_work_table.c.work_time_ended == None,
+    #         )
+    #     ).values(
+    #         work_time_started=first_work_stage,
+    #         work_time_ended=latest_work_stage
+    #     )
+    # )
     return sanic_json({
         "first": str(first_work_stage),
         "latest": str(latest_work_stage)
     })
-
-# now = datetime.now(tz=local_tz)
-# now_to_str = now.strftime("%Y-%m-%d-%H-%M-%S")
-# backup_year = str(now.year)
-# backup_month = now.strftime("%B")
-# backup_directory = f"web/backups/{backup_year}/{backup_month}"
-
-
-# @history.get('/api/backup')
-# def backup_db(request):
-
-#     def backup_daily(table_name):
-
-#         print(backup_year)
-#         print(backup_month)
-#         query = select(table_name)
-
-#         if not os.path.exists(backup_directory):
-#             os.makedirs(backup_directory)
-#         with engine.begin() as conn:
-#             backup = conn.execute(query)
-#         df = pd.DataFrame(data=backup)
-#         file_name = now_to_str + f'_{table_name}_backup'
-#         return_csv = f"{backup_directory}/{file_name}.csv"
-#         df.to_csv(return_csv, sep=",", index=False)
-
-#     def backup_bi_weekly():
-#         tables = [tk_users_table, tk_campaigns_table, tk_project_owner_table,
-#                   tk_user_campaign_table, tk_campaign_statuses_table]
-#         for table in tables:
-#             query = select(table)
-#             if not os.path.exists(backup_directory):
-#                 os.makedirs(backup_directory)
-#             with engine.begin() as conn:
-#                 backup = conn.execute(query)
-#                 df = pd.DataFrame(data=backup)
-#                 file_name = now_to_str + f'_{table}_backup'
-#                 return_csv = f"{backup_directory}/{file_name}.csv"
-#                 df.to_csv(return_csv, sep=",", index=False)
-#     backup_bi_weekly()
-#     return text('Backup completed')

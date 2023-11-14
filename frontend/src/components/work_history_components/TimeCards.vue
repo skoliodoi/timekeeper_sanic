@@ -211,8 +211,7 @@ export default {
           class: "tiny inverted",
           closable: false,
           onApprove: async function () {
-            await val.dispatch("deleteWorkHistory", {id, projectView: val.state.workHistoryModule.detailsFromProjectView});
-            console.log(val.state.workHistoryModule.detailsFromProjectView)
+            await val.dispatch("deleteWorkHistory", {id, login, selectedDate: startDate, projectView: val.state.workHistoryModule.detailsFromProjectView});
             if (val.state.workHistoryModule.detailsFromProjectView) {
               await val.dispatch("getWorkHistoryByProject");
               val.state.workHistoryModule.displayValue = "project";

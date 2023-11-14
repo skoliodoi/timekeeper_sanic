@@ -79,7 +79,6 @@ export default {
     },
     searchHandler(val) {
       if (val == "check-schedule") {
-        console.log(this.calendarType);
         this.calendarType = "date";
       }
       $("#day-calendar").calendar({

@@ -2,7 +2,7 @@ from sanic import Blueprint
 from sanic.response import json as sanic_json, text
 from sqlalchemy import select, desc, and_, delete, update
 from sqlalchemy.dialects.mysql import insert
-from datetime import datetime, date
+from datetime import datetime, timedelta
 from web.auth import protected
 import pytz
 from web.db_connection import engine, tk_current_work_table, tk_finished_work_table, tk_clients_table, tk_campaigns_table, tk_projects_table
@@ -36,18 +36,21 @@ def select_query_for_data_migration(query_target, query_parameter):
     )
     return query
 
+
 def find_client(id):
-  query = select(tk_clients_table.c.client_name).select_from(
-      tk_clients_table
-  ).join(
-      tk_projects_table, tk_projects_table.c.client_id == tk_clients_table.c.id
-  ).join(
-      tk_campaigns_table, tk_campaigns_table.c.project_id == tk_projects_table.c.id
-  ).where(
-      tk_campaigns_table.c.campaign_id == id
-  )
-  return query
+    query = select(tk_clients_table.c.client_name).select_from(
+        tk_clients_table
+    ).join(
+        tk_projects_table, tk_projects_table.c.client_id == tk_clients_table.c.id
+    ).join(
+        tk_campaigns_table, tk_campaigns_table.c.project_id == tk_projects_table.c.id
+    ).where(
+        tk_campaigns_table.c.campaign_id == id
+    )
+    return query
 # Funkcja "data_migration" służy do przerzucania danych między tabelami "tk_current_work_table" i "tk_finished_work_table"
+
+
 def data_migration(query_parameter):
     with engine.begin() as conn:
         # Używając funkcji pomocniczej "select_query_for_data_migration" wyszukujemy z tabeli "tk_current_work_table"
@@ -224,52 +227,20 @@ async def get_id(request, user_id):
     return sanic_json(response)
 
 
-# @counter.post("/fix_work_start")
-# def fix_work_start(request):
-#     user = request.json.get('user')
-#     today = date.today()
-#     current_query = select(tk_current_work_table).where(
-#         tk_current_work_table.c.user_id == user
-#     )
-#     finished_query = select(tk_finished_work_table).where(
-#         tk_finished_work_table.c.work_time_started.like(f"%{today}%")
-#     ).where(
-#         tk_finished_work_table.c.work_time_ended == None
-#     ).where(
-#         tk_finished_work_table.c.user_id == user
-#     )
-#     with engine.begin() as conn:
-#         result = conn.execute(finished_query).first()
-#     if result:
-#         print(result)
-#         return text("There is")
-#     else:
-#         new_date = '2023-04-04 08:00:00'
-
-#         with engine.begin() as current_conn:
-#             current = current_conn.execute(current_query).first()
-#             query = update(tk_current_work_table).set(
-#                 work_time_started=new_date
-#             ).where(
-#                 tk_current_work_table.c.user_id == user
-#             )
-#         print(current)
-#         return text('Current')
-
-
 # Ścieżka "/finish_work" służy do kończeniu danego dnia pracy i zapisywania informacji na jego temat w bazie danych.
 @counter.post('/api/finish_work')
 @protected
 async def finish_work(request):
     user = request.json.get('user_id')
     date = request.json.get('date_id')
+    work_start = request.json.get('work_time_started')
     work_end = request.json.get('work_time_ended')
     # Kopiujemy finałową porcję danych z tabeli "tk_current_work_table" do "tk_finished_work_table" i usuwamy zbędne rekordy.
     data_migration(user)
     # Aktualizujemy "tk_finished_work_table" - dodajemy godzinę zakończenia całego dnia pracy do wszystkich poprzednich rekordów z tego samego dnia.
     update_end_time_query = update(tk_finished_work_table).where(
         and_(
-            tk_finished_work_table.c.work_time_ended.is_(None),
+            tk_finished_work_table.c.work_time_started == work_start,
             tk_finished_work_table.c.user_id == user,
             tk_finished_work_table.c.work_time_started.like(f"%{date}%")
         )
@@ -278,7 +249,7 @@ async def finish_work(request):
     )
     with engine.begin() as conn:
         conn.execute(update_end_time_query)
-    return text("Work finished!")
+    return text(work_start)
 
 
 def move_from_current_work(record):
@@ -299,7 +270,7 @@ def move_from_current_work(record):
                 work_stage_id=record.work_stage_id,
                 campaign_id=record.campaign_id,
                 campaign_name=record.campaign_name,
-                project_name = client.client_name,
+                project_name=client.client_name,
                 work_stage=record.work_stage,
                 work_stage_additional_info=record.work_stage_additional_info,
                 work_stage_started=record.work_stage_started,
@@ -315,19 +286,19 @@ def move_from_current_work(record):
                 created_at=datetime.now(),
                 updated_at=datetime.now()
             ))
-        conn.execute(
-            update(
-                tk_finished_work_table
-            ).where(
-                tk_finished_work_table.c.work_stage_ended.like(
-                    f"%{date.today()}%")
-            ).where(
-                tk_finished_work_table.c.user_id == record.user_id
-            )
-            .values(
-                work_time_ended=work_time_ended
-            )
-        )
+        # conn.execute(
+        #     update(
+        #         tk_finished_work_table
+        #     ).where(
+        #         tk_finished_work_table.c.work_stage_ended.like(
+        #             f"%{date.today()}%")
+        #     ).where(
+        #         tk_finished_work_table.c.user_id == record.user_id
+        #     )
+        #     .values(
+        #         work_time_ended=work_time_ended
+        #     )
+        # )
         conn.execute(
             delete(
                 tk_current_work_table
@@ -335,3 +306,70 @@ def move_from_current_work(record):
                 tk_current_work_table.c.work_stage_id == record.work_stage_id
             )
         )
+
+
+def group_records(records):
+    groups = []
+    current_group = [records[0]]
+
+    for i in range(1, len(records)):
+        current_record = records[i]
+        previous_record = records[i - 1]
+
+        if current_record['ws_started'] - previous_record['ws_ended'] <= timedelta(minutes=0):
+            # No gap, add to the current group
+            current_group.append(current_record)
+        else:
+            # Gap found, start a new group
+            groups.append(current_group)
+            current_group = [current_record]
+
+    # Add the last group
+    groups.append(current_group)
+
+    return groups
+
+
+def update_work_end_time(user_id, selected_date):
+    with engine.begin() as conn:
+        result = conn.execute(
+            select(tk_finished_work_table.c.work_stage_id,
+                   tk_finished_work_table.c.work_stage_started,
+                   tk_finished_work_table.c.work_stage_ended
+                   ).where(
+                tk_finished_work_table.c.user_id == user_id,
+                tk_finished_work_table.c.work_stage_ended.like(
+                    f"%{selected_date}%")
+            ).order_by(
+                tk_finished_work_table.c.work_stage_started
+            )
+        ).fetchall()
+    fixed = [{'id': d.work_stage_id,
+             'ws_started': d.work_stage_started,
+              'ws_ended': d.work_stage_ended,
+              } for d in result]
+
+    # Group the records
+    record_groups = group_records(fixed)
+
+    # Update 'wt_started' and 'wt_ended' for each group
+    for group in record_groups:
+        group_start_times = [record['ws_started'] for record in group]
+        group_end_times = [record['ws_ended'] for record in group]
+
+        earliest_start_time = min(group_start_times)
+        latest_end_time = max(group_end_times)
+
+        with engine.begin() as conn:
+            conn.execute(update(
+                tk_finished_work_table
+            ).where(
+                tk_finished_work_table.c.user_id == user_id,
+                tk_finished_work_table.c.work_stage_ended.like(
+                    f"%{selected_date}%"),
+                tk_finished_work_table.c.work_stage_started >= earliest_start_time,
+                tk_finished_work_table.c.work_stage_ended <= latest_end_time
+            ).values(
+                work_time_started=earliest_start_time,
+                work_time_ended=latest_end_time
+            ))

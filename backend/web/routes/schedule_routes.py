@@ -89,36 +89,40 @@ async def download_schedule(request):
         tk_schedules_table.c.project_code == request.json['project']
     )
 
-    def compare_to_history(start_date, end_date, users):
-      query = select(
-          tk_finished_work_table.c.work_stage_started,
-          tk_finished_work_table.c.work_stage_ended,
-          tk_finished_work_table.c.work_stage_duration,
-          tk_finished_work_table.c.work_stage,
-          tk_finished_work_table.c.work_stage_additional_info,
-          tk_finished_work_table.c.work_time_ended,
-          tk_finished_work_table.c.work_time_started,
-          tk_finished_work_table.c.campaign_name,
-          tk_finished_work_table.c.campaign_id,
-          tk_projects_table.c.project_code,
-          tk_projects_table.c.project_name,
-          tk_users_table.c.moccarz_id
-      ).select_from(
-          tk_finished_work_table
-      ).join(
-          tk_campaigns_table, tk_campaigns_table.c.campaign_id == tk_finished_work_table.c.campaign_id
-      ).join(
-          tk_projects_table, tk_projects_table.c.id == tk_campaigns_table.c.project_id
-      ).join(
-          tk_users_table, tk_finished_work_table.c.user_id == tk_users_table.c.login
-      ).where(
-          and_(func.date(tk_finished_work_table.c.work_stage_ended) >= start_date,
-              func.date(tk_finished_work_table.c.work_stage_ended) <= end_date,
-              tk_finished_work_table.c.is_ghost == False,
-              tk_finished_work_table.c.user_id.in_(users),
-              )
-      ).order_by(asc(tk_finished_work_table.c.work_stage_ended))
-      return query
+
+
+    def compare_to_history(users):
+      with engine.begin() as conn:        
+        result = conn.execute(select(
+            tk_finished_work_table.c.work_stage_started,
+            tk_finished_work_table.c.work_stage_ended,
+            tk_finished_work_table.c.work_stage_duration,
+            tk_finished_work_table.c.work_stage,
+            tk_finished_work_table.c.work_stage_additional_info,
+            tk_finished_work_table.c.work_time_ended,
+            tk_finished_work_table.c.work_time_started,
+            tk_finished_work_table.c.campaign_name,
+            tk_finished_work_table.c.campaign_id,
+            tk_projects_table.c.project_code,
+            tk_projects_table.c.project_name,
+            tk_users_table.c.moccarz_id
+        ).select_from(
+            tk_finished_work_table
+        ).join(
+            tk_campaigns_table, tk_campaigns_table.c.campaign_id == tk_finished_work_table.c.campaign_id
+        ).join(
+            tk_projects_table, tk_projects_table.c.id == tk_campaigns_table.c.project_id
+        ).join(
+            tk_users_table, tk_finished_work_table.c.user_id == tk_users_table.c.login
+        ).where(
+            and_(func.date(tk_finished_work_table.c.work_stage_ended) >= request.json['date'],
+                func.date(tk_finished_work_table.c.work_stage_ended) <= request.json['date'],
+                tk_finished_work_table.c.is_ghost == False,
+                tk_finished_work_table.c.user_id.in_(users),
+                tk_projects_table.c.project_code == request.json['project']
+                )
+        ).order_by(asc(tk_finished_work_table.c.work_stage_ended))).fetchall()
+      return result
 
     with engine.begin() as conn:
         result = conn.execute(query).fetchall()
@@ -167,27 +171,18 @@ async def download_schedule(request):
     ids = list(dict.fromkeys([t['mocarz_id'] for t in transformed_data]))
     with engine.begin() as conn:
         result = conn.execute(get_logins(ids)).fetchall()
-    full_users = [{'mocarz_id': r.moccarz_id, 'login': r.login} for r in result]
     logins = list(dict.fromkeys([r.login for r in result]))
-    # print(logins)
-    # conn.execute(compare_to_history(request.json['date'], request.json['date'], login))
-    with engine.begin() as conn:
-        work_history = conn.execute(compare_to_history(
-            request.json['date'], request.json['date'], logins)).fetchall()
-        # print(work_history)
-        # for person in transformed_data:
-        #     # login = get_user_login(str(person['mocarz_id']))
-        #     person['work_history'] = [
-        #         dict(work_stage._mapping) for work_stage in work_history]
+
+
+    work_history = compare_to_history(logins)
     for person in transformed_data:
       person['work_history'] = []
       for w in work_history:
-          if w.moccarz_id == person['mocarz_id']:
+          if person['mocarz_id'] == w.moccarz_id:
             person['work_history'].append(dict(w._mapping))
     transformed_data_json = json.dumps(
         transformed_data, default=str, ensure_ascii=False)
     return sanic_json(transformed_data_json)
-    # return text('Oke')
 
 
 @schedules.post('/api/upload_schedule')
