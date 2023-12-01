@@ -77,7 +77,7 @@ export default {
         this.calendarType = "date";
       }
     },
-    searchHandler(val) {
+    searchHandler(val) {  
       if (val == "check-schedule") {
         this.calendarType = "date";
       }
